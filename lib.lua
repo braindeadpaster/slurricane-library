@@ -1,4 +1,8 @@
 --[[
+    juanita.lua — full UI library (eskolz-style recreation) — Roblox Lua
+    Self-contained. Returns the Library table; a demo config is built at the
+    bottom of the file (clearly marked — delete it when using as a library).
+
     Music player: drop .mp3 / .ogg / .wav files into <executor workspace>/slurricane/music
     Menu toggle: RightShift
 ]]
@@ -229,23 +233,37 @@ end))
 
 function Library:CreateWatermark(opts)
     opts = opts or {}
-    local username = (LP and LP.Name) or "samet"
-    local labels = {}
-    local pillFrames = {}
+    local brand = opts.Text or ('<font color="#%s">slurricane.dev</font>'):format(ACCENT_HEX)
+    local SEP = ' <font color="#4a4a4a">|</font> '
 
-    local function pill(order, richText)
-        local y = 14 + (order - 1) * 34
+    -- centered, top of screen, two stacked pills (main line + session line)
+    local container = New("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, -44),  -- starts above, slides down
+        Size = UDim2.fromOffset(0, 0),
+        AutomaticSize = Enum.AutomaticSize.XY,
+        BackgroundTransparency = 1,
+        Parent = gui,
+    }, {
+        New("UIListLayout", {
+            Padding = UDim.new(0, 4),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        }),
+    })
+
+    local function makePill(order)
         local frame = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, 320, 0, y),
+            LayoutOrder = order,
             Size = UDim2.fromOffset(0, 26),
             AutomaticSize = Enum.AutomaticSize.X,
             BackgroundColor3 = Theme.Panel,
+            BackgroundTransparency = 0.1,
             BorderSizePixel = 0,
-            Parent = gui,
+            Parent = container,
         }, {
             Stroke(Theme.Border),
-            New("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }),
+            New("UIPadding", { PaddingLeft = UDim.new(0, 11), PaddingRight = UDim.new(0, 11) }),
         })
         local label = New("TextLabel", {
             Size = UDim2.new(0, 0, 1, 0),
@@ -253,45 +271,47 @@ function Library:CreateWatermark(opts)
             BackgroundTransparency = 1,
             Font = FONT,
             RichText = true,
-            Text = richText,
+            Text = "",
             TextSize = 13,
             TextColor3 = Theme.Text,
             Parent = frame,
         })
-        table.insert(pillFrames, frame)
-        task.delay(0.1 * order, function()
-            tween(frame, { Position = UDim2.new(1, -12, 0, y) }, 0.45, Enum.EasingStyle.Back)
-        end)
-        return label
+        return frame, label
     end
 
-    pill(1, opts.Text or ('this is a <font color="#%s">watermark.</font>'):format(ACCENT_HEX))
-    labels.fps  = pill(2, "◆  60 fps")
-    labels.ping = pill(3, "📶  0 ping")
-    pill(4, "👤  logged in as " .. username)
+    local mainFrame, mainLabel = makePill(1)
+    local sessFrame, sessLabel = makePill(2)
+    sessFrame.Visible = false
+
+    tween(container, { Position = UDim2.new(0.5, 0, 0, 12) }, 0.5, Enum.EasingStyle.Back)
+
+    local fps = 60
+    local function rebuild()
+        local ok, ping = pcall(function()
+            return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+        end)
+        mainLabel.Text = brand .. SEP
+            .. ("%d fps"):format(fps) .. SEP
+            .. ("%d ping"):format(ok and ping or 0) .. SEP
+            .. os.date("%H:%M:%S")
+    end
+    rebuild()
 
     trackConn(RunService.Heartbeat:Connect(function(dt)
         Library._wmFrames = (Library._wmFrames or 0) + 1
         Library._wmAcc = (Library._wmAcc or 0) + dt
         if Library._wmAcc >= 0.5 then
-            labels.fps.Text = ("◆  %d fps"):format(Library._wmFrames / Library._wmAcc + 0.5)
+            fps = math.floor(Library._wmFrames / Library._wmAcc + 0.5)
             Library._wmFrames, Library._wmAcc = 0, 0
-            local ok, ping = pcall(function()
-                return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
-            end)
-            labels.ping.Text = ("📶  %d ping"):format(ok and ping or 0)
+            rebuild()
         end
     end))
 
     return {
-        SetVisible = function(on)
-            for _, frame in ipairs(pillFrames) do frame.Visible = on end
-        end,
-        -- appends an extra pill below the stack; returns a setter for its text
-        AddPill = function(richText)
-            local label = pill(#pillFrames + 1, richText)
-            return function(newText) label.Text = newText end
-        end,
+        SetVisible = function(on) container.Visible = on end,
+        -- session sub-line: caller (the script) computes + pushes the text
+        SetSession = function(richText) sessLabel.Text = richText end,
+        SetSessionVisible = function(on) sessFrame.Visible = on and true or false end,
     }
 end
 
