@@ -1,8 +1,4 @@
 --[[
-    juanita.lua — full UI library (eskolz-style recreation) — Roblox Lua
-    Self-contained. Returns the Library table; a demo config is built at the
-    bottom of the file (clearly marked — delete it when using as a library).
-
     Music player: drop .mp3 / .ogg / .wav files into <executor workspace>/slurricane/music
     Menu toggle: RightShift
 ]]
@@ -213,7 +209,6 @@ trackConn(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         local listen = Library._listening
         Library._listening = nil
         if input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Escape then
-            if listen.currentKey then Library.Binds[listen.currentKey()] = nil end
             listen.clear()
         else
             listen.assign(input.KeyCode)
@@ -291,6 +286,11 @@ function Library:CreateWatermark(opts)
     return {
         SetVisible = function(on)
             for _, frame in ipairs(pillFrames) do frame.Visible = on end
+        end,
+        -- appends an extra pill below the stack; returns a setter for its text
+        AddPill = function(richText)
+            local label = pill(#pillFrames + 1, richText)
+            return function(newText) label.Text = newText end
         end,
     }
 end
@@ -409,6 +409,8 @@ local function AddCheckbox(holder, text, default, opts, callback)
         if callback then callback(state) end
     end
 
+    local clearBind, assignBind
+
     if opts.Keybind then
         local tag = New("TextButton", {
             AnchorPoint = Vector2.new(1, 0.5),
@@ -424,25 +426,30 @@ local function AddCheckbox(holder, text, default, opts, callback)
         })
         tag.MouseEnter:Connect(function() tween(tag, { TextColor3 = Theme.Accent }, 0.12) end)
         tag.MouseLeave:Connect(function() tween(tag, { TextColor3 = Theme.TextDim }, 0.12) end)
+
+        clearBind = function()
+            if currentKey then Library.Binds[currentKey] = nil end
+            currentKey = nil
+            tag.Text = "[–]"
+            tag.TextColor3 = Theme.TextDim
+        end
+        assignBind = function(keyCode)
+            if currentKey then Library.Binds[currentKey] = nil end
+            currentKey = keyCode
+            local name = keyCode.Name
+            if #name > 5 then name = name:sub(1, 5) end
+            tag.Text = "[" .. name .. "]"
+            tag.TextColor3 = Theme.TextDim
+            Library.Binds[keyCode] = function() set(not state) end
+        end
+
         tag.MouseButton1Click:Connect(function()
             tag.Text = "[...]"
             tag.TextColor3 = Theme.Accent
             Library._listening = {
                 currentKey = function() return currentKey end,
-                clear = function()
-                    currentKey = nil
-                    tag.Text = "[–]"
-                    tag.TextColor3 = Theme.TextDim
-                end,
-                assign = function(keyCode)
-                    if currentKey then Library.Binds[currentKey] = nil end
-                    currentKey = keyCode
-                    local name = keyCode.Name
-                    if #name > 5 then name = name:sub(1, 5) end
-                    tag.Text = "[" .. name .. "]"
-                    tag.TextColor3 = Theme.TextDim
-                    Library.Binds[keyCode] = function() set(not state) end
-                end,
+                clear = clearBind,
+                assign = assignBind,
             }
         end)
     end
@@ -457,7 +464,24 @@ local function AddCheckbox(holder, text, default, opts, callback)
     end)
 
     if state and callback then callback(state) end
-    return { Set = set, Get = function() return state end }
+    return {
+        Set = set,
+        Get = function() return state end,
+        -- keybind persistence: returns the bound key name (or nil); SetBind
+        -- accepts a KeyCode name string, or nil/"" to clear
+        GetBind = function()
+            return currentKey and currentKey.Name or nil
+        end,
+        SetBind = function(keyName)
+            if not assignBind then return end
+            if not keyName or keyName == "" then
+                clearBind()
+                return
+            end
+            local ok, keyCode = pcall(function() return Enum.KeyCode[keyName] end)
+            if ok and keyCode then assignBind(keyCode) end
+        end,
+    }
 end
 
 local function AddSlider(holder, text, min, max, default, suffix, callback, step)
@@ -1566,4 +1590,3 @@ Library:CreateMusicPlayer({ Folder = "slurricane/music" })
 end -- demo
 
 return Library
-
