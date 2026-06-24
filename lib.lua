@@ -229,6 +229,60 @@ trackConn(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if bound then bound() end
 end))
 
+-- // mobile toggle button -----------------------------------------------------------
+-- touch devices have no RightShift, so drop a small draggable button that opens /
+-- closes the menu. tap = toggle, drag = reposition. only created on real mobile.
+
+if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+    local btn = New("TextButton", {
+        Name = "MobileToggle",
+        Size = UDim2.fromOffset(46, 46),
+        Position = UDim2.new(0, 16, 0, 96),
+        BackgroundColor3 = Theme.Panel,
+        BackgroundTransparency = 0.1,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 50,
+        Parent = gui,
+    }, {
+        New("UICorner", { CornerRadius = UDim.new(0, 10) }),
+        Stroke(Theme.Accent),
+        New("TextLabel", {
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            Font = FONT,
+            Text = "S",
+            TextSize = 22,
+            TextColor3 = Theme.Accent,
+            ZIndex = 51,
+        }),
+    })
+
+    local dragging, moved, startTouch, startBtn = false, false, nil, nil
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            dragging, moved = true, false
+            startTouch = input.Position
+            startBtn = btn.Position
+        end
+    end)
+    trackConn(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - startTouch
+            if math.abs(delta.X) + math.abs(delta.Y) > 8 then moved = true end
+            btn.Position = UDim2.new(startBtn.X.Scale, startBtn.X.Offset + delta.X,
+                                     startBtn.Y.Scale, startBtn.Y.Offset + delta.Y)
+        end
+    end))
+    trackConn(UserInputService.InputEnded:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not moved then Library:Toggle() end  -- a tap (not a drag) toggles
+        end
+    end))
+end
+
 -- // watermark (same stack as the previous ui, restyled) ----------------------------
 
 function Library:CreateWatermark(opts)
@@ -1610,3 +1664,4 @@ Library:CreateMusicPlayer({ Folder = "slurricane/music" })
 end -- demo
 
 return Library
+
